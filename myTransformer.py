@@ -27,9 +27,9 @@ class MultiHeadAttentionLayer(torch.nn.Module):
         self.config = config
         self.m_head = config.num_attention_heads
 
-        self.q_linear = torch.nn.Linear(config.hidden_size, config.hidden_size)
-        self.k_linear = torch.nn.Linear(config.hidden_size, config.hidden_size)
-        self.v_linear = torch.nn.Linear(config.hidden_size, config.hidden_size)
+        self.query = torch.nn.Linear(config.hidden_size, config.hidden_size)
+        self.key = torch.nn.Linear(config.hidden_size, config.hidden_size)
+        self.value = torch.nn.Linear(config.hidden_size, config.hidden_size)
 
         self.dropout = torch.nn.Dropout(config.attention_probs_dropout_prob)
 
@@ -39,7 +39,7 @@ class MultiHeadAttentionLayer(torch.nn.Module):
         return x.permute(0, 2, 1, 3)
 
     def forward(self, hidden_states, attention_mask=None, head_mask=None):
-        q, k, v = self.q_linear(hidden_states), self.k_linear(hidden_states), self.v_linear(hidden_states)
+        q, k, v = self.query(hidden_states), self.key(hidden_states), self.value(hidden_states)
         q, k, v = self._split_head(q), self._split_head(k), self._split_head(v)
         batch_size, m_head, seq_len, head_dim = v.shape
 
@@ -90,8 +90,8 @@ class TransformerBlock(torch.nn.Module):
                                        torch.nn.ReLU(),
                                        torch.nn.Linear(config.hidden_size * 4, config.hidden_size))
 
-        self.norm1 = LayerNorm(config.hidden_size, config.layer_norm_epsilong)
-        self.norm2 = LayerNorm(config.hidden_size, config.layer_norm_epsilong)
+        self.norm1 = LayerNorm(config.hidden_size, config.layer_norm_eps)
+        self.norm2 = LayerNorm(config.hidden_size, config.layer_norm_eps)
         self.dropout = torch.nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, x):
@@ -113,7 +113,7 @@ def layernorm_sample():
 class ExampleConfig():
     def __init__(self):
         self.num_attention_heads = 3
-        self.layer_norm_epsilong = 1e-5
+        self.layer_norm_eps = 1e-5
         self.resid_pdrop = 0.1
         self.attention_probs_dropout_prob = 0.1
         self.hidden_size = 12

@@ -279,76 +279,6 @@ class BasicTokenizer():
         return ["".join(x) for x in output]
 
 
-class BertTokenizer():
-    def __init__(self, vocab_file, do_lower_case=True, do_basic_tokenize=True, tokenizer_chinese_chars=True):
-        self.special_tokens = ['[UNK]', '[SEP]', '[PAD]', '[CLS]', '[MASK]']
-        self.unk, self.sep, self.pad, self.cls, self.mask = self.special_tokens
-        self.do_basic_tokenize = do_basic_tokenize
-        self.vocab = self._load_vocab(vocab_file)
-        if do_basic_tokenize:
-            self.basic_tokenizer = BasicTokenizer(do_lower_case, self.special_tokens, tokenizer_chinese_chars)
-        self.wordpiece_tokenizer = WordPieceTokenizer(vocab_size=len(self.vocab), lowercase=do_lower_case,
-                                                      basic_tokenizer=lambda x: x.strip().split(),
-                                                      unk=self.unk, sep=self.sep, pad=self.pad, cls=self.cls,
-                                                      mask=self.mask)
-        self.wordpiece_tokenizer.load(vocab=self.vocab)
-
-    def _load_vocab(self, vocab_file):
-        vocab = OrderedDict()
-        for idx, token in enumerate(open(vocab_file, 'r').readlines()):
-            vocab[token.rstrip('\n')] = idx
-        return vocab
-
-    def tokenize(self, text):
-        tokens = []
-        if self.do_basic_tokenize:
-            for token in self.basic_tokenizer.tokenize(text, never_split=self.special_tokens):
-                if token in self.special_tokens:
-                    tokens.append(token)
-                else:
-                    tokens.extend(self.wordpiece_tokenizer.tokenize(token, add_post=None, add_mid="##", add_pre=None))
-        else:
-            tokens.extend(self.wordpiece_tokenizer.tokenize(text, add_post=None, add_mid="##", add_pre=None))
-
-        return tokens
-
-    def convert_tokens_to_ids(self, tokens):
-        if isinstance(tokens, str):
-            tokens = [tokens, ]
-        return [self.vocab.get(token, self.vocab.get(self.unk)) for token in tokens]
-
-    def encode_plus(self, text, text_pair=None, max_length=None, padding=True, truncation=True):
-        text_ids = self.convert_tokens_to_ids(self.tokenize(text))
-        text_pair_ids = self.convert_tokens_to_ids(self.tokenize(text_pair)) if text_pair else []
-
-        ids_len = len(text_ids) + len(text_pair_ids) + 3 if text_pair_ids else len(text_ids) + 2
-        if truncation and ids_len > max_length:
-            # longest first
-            for _ in range(ids_len - max_length):
-                if len(text_ids) > len(text_pair_ids):
-                    text_ids = text_ids[:-1]
-                else:
-                    text_pair_ids = text_pair_ids[:-1]
-
-        # [cls] text1 [sep] text2 [sep]
-        input_ids = self.convert_tokens_to_ids([self.cls]) + text_ids + self.convert_tokens_to_ids([self.sep])
-        segment_ids = [0] * len(input_ids)
-        attention_mask = [1] * len(input_ids)
-        if text_pair_ids:
-            input_ids += text_pair_ids + self.convert_tokens_to_ids([self.sep])
-            segment_ids += [1] * (len(text_pair_ids) + 1)
-            attention_mask += [1] * (len(text_pair_ids) + 1)
-
-        if padding:
-            # max length
-            while len(input_ids) < max_length:
-                input_ids += self.convert_tokens_to_ids(self.pad)
-                segment_ids += [0]
-                attention_mask += [0]
-
-        return {"input_ids": input_ids, "segment_ids": segment_ids, "attention_mask": attention_mask}
-
-
 def bpe_sample():
     corpus = '''
             Object raspberrypi functools dict kwargs. Gevent raspberrypi functools. Dunder raspberrypi decorator dict didn't lambda zip import pyramid, she lambda iterate?
@@ -392,41 +322,6 @@ def wp_sample():
     # [[4, 9, 4, 4, 9, 10, 9, 5, 48, 5, 29, 5, 11, 9, 11, 10, 5, 27, 5, 7, 5, 28, 5, 37, 5, 9, 10, 16, 12, 10, 16, 8, 9, 4, 15, 65, 8, 5, 47, 5]]
     print(wp.decode(wp.encode(["Vizzini: He didn't fall? INCONCEIVABLE!"])))
     # ["<UNK>i<UNK><UNK>ini : he didn ' t fall ? inconcei<UNK>able ! "]
-
-
-def sample_BertTokenizer():
-    text = "“五一”小长假临近，30岁的武汉市民万昕在文旅博览会上获得了一些制定5天旅游计划的新思路。“‘壮美广西’‘安逸四川’，还有‘有一种叫云南的生活’这些展馆标识都很新颖，令人心向往之。”万昕说，感到身边越来越多的人走出家门去旅游。"
-    # text = 'Say that thou didst forsake me for some fault, And I will comment upon that offence; Speak of my lameness, and I straight will halt, Against thy reasons making no defence.'
-
-    tokenizer = BertTokenizer(vocab_file='../models/bert-base-uncased/vocab.txt')
-    tokens = tokenizer.tokenize(text)
-    ids = tokenizer.convert_tokens_to_ids(tokens)
-    plus = tokenizer.encode_plus(text, max_length=100, padding=True, truncation=True)
-    print("=" * 50, 'my')
-    print(tokens)
-    print(ids)
-    print(plus)
-
-    from transformers import BertTokenizer as OfficialBertTokenizer
-    official_tokenizer = OfficialBertTokenizer(vocab_file='../models/bert-base-uncased/vocab.txt')
-    official_tokens = official_tokenizer.tokenize(text)
-    official_ids = official_tokenizer.convert_tokens_to_ids(official_tokens)
-    official_plus = official_tokenizer.encode_plus(text, max_length=100, padding='max_length', truncation='longest_first')
-    print('=' * 50 + 'huggingface')
-    print(official_tokens)
-    print(official_ids)
-    print(official_plus)
-
-    assert tokens == official_tokens
-    assert ids == official_ids
-    assert plus['input_ids'] == official_plus['input_ids']
-    assert plus['segment_ids'] == official_plus['token_type_ids']
-    assert plus['attention_mask'] == official_plus['attention_mask']
-
-    print('=' * 50 + 'special tokens')
-    tokens = ['[UNK]', '[SEP]', '[PAD]', '[CLS]', '[MASK]']
-    print(tokenizer.convert_tokens_to_ids(tokens))
-    print(official_tokenizer.convert_tokens_to_ids(tokens))
 
 
 if __name__ == "__main__":
